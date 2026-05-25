@@ -1,0 +1,11 @@
+
+# Secrets
+firmware/src/config.h
+backend/.env
+
+# Python
+backend/__pycache__/
+backend/*.pyc
+
+# OS
+.DS_Store
