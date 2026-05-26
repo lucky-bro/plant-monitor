@@ -6,3 +6,4 @@ paho-mqtt
 python-dotenv
 alembic
 psycopg2-binary
+python-telegram-bot==21.0.1

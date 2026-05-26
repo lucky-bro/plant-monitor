@@ -12,6 +12,7 @@ from models import TelemetryRaw, AlertState, DeviceState
 import mqtt_client as mqtt_module
 from alerts import evaluate_alerts
 from offline import update_device_seen, offline_detection_loop
+from telegram_bot import start_bot, stop_bot
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -75,9 +76,11 @@ async def lifespan(app: FastAPI):
     logger.info("[MQTT] Client started.")
 
     offline_task = asyncio.create_task(offline_detection_loop())
+    await start_bot()
 
     yield
 
+    await stop_bot()
     offline_task.cancel()
     if mqtt_client:
         mqtt_module.stop_mqtt(mqtt_client)

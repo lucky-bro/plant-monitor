@@ -95,5 +95,5 @@ async def evaluate_alerts(session: AsyncSession, device_id: str, payload: dict):
 
 
 async def _notify(message: str):
-    if notify_fn:
-        await notify_fn(message)
+    from telegram_bot import send_notification
+    await send_notification(message)

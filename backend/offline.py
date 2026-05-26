@@ -72,5 +72,5 @@ async def offline_detection_loop():
 
 
 async def _notify(message: str):
-    if notify_fn:
-        await notify_fn(message)
+    from telegram_bot import send_notification
+    await send_notification(message)
