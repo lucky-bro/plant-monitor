@@ -1,8 +1,8 @@
-const SERVER_API = process.env.BACKEND_URL          ?? "http://localhost:8000";
-const CLIENT_API = process.env.NEXT_PUBLIC_API_URL  ?? "http://localhost:8000";
-
 function apiBase(): string {
-  return typeof window === "undefined" ? SERVER_API : CLIENT_API;
+  if (typeof window === "undefined") {
+    return process.env.BACKEND_URL ?? "http://localhost:8000";
+  }
+  return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 }
 
 export interface Telemetry {
@@ -87,5 +87,5 @@ export async function fetchHistory(
 }
 
 export function getEventsUrl(): string {
-  return `${CLIENT_API}/events`;
+  return `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/events`;
 }
