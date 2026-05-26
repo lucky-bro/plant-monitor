@@ -1,0 +1,20 @@
+services:
+  frontend:
+    build: .
+    container_name: plant-frontend
+    restart: always
+    environment:
+      - BACKEND_URL=http://plant-backend:8000
+    networks:
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=web"
+      - "traefik.http.routers.plant-frontend.rule=Host(`plants.asytnyk.com`)"
+      - "traefik.http.routers.plant-frontend.entrypoints=websecure"
+      - "traefik.http.routers.plant-frontend.tls.certresolver=myresolver"
+      - "traefik.http.services.plant-frontend.loadbalancer.server.port=3000"
+
+networks:
+  web:
+    external: true
