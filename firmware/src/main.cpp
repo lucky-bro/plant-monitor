@@ -1,7 +1,7 @@
 #include <WiFi.h>
 #include <Wire.h>
 #include <Adafruit_Sensor.h>
-#include <Adafruit_BMP280.h>
+#include <Adafruit_BME280.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include <time.h>
@@ -21,6 +21,7 @@ const int BUFFER_SIZE = 120;
 
 struct Reading {
   float temperature;
+  float humidity;
   float pressure;
   int   soil_moisture;
   int   light;
@@ -34,7 +35,7 @@ int buf_head      = 0;
 int buf_count     = 0;
 int overflow_count = 0;
 
-Adafruit_BMP280 bmp;
+Adafruit_BME280 bme;
 WiFiClient      wifi_client;
 PubSubClient    mqtt(wifi_client);
 
@@ -76,8 +77,9 @@ Reading buffer_pop() {
 Reading read_sensors() {
   Reading r;
   r.valid       = true;
-  r.temperature = bmp.readTemperature();
-  r.pressure    = bmp.readPressure() / 100.0;
+  r.temperature = bme.readTemperature();
+  r.humidity    = roundf(bme.readHumidity() * 10) / 10;
+  r.pressure    = bme.readPressure() / 100.0;
   r.light       = -1;
 
   int raw_soil    = analogRead(SOIL_PIN);
@@ -88,8 +90,8 @@ Reading read_sensors() {
   seq++;
   generate_message_id(r.message_id, DEVICE_ID, r.timestamp, seq);
 
-  Serial.printf("[SENSOR] temp=%.1f°C  pressure=%.1fhPa  soil=%d%%\n",
-                r.temperature, r.pressure, r.soil_moisture);
+  Serial.printf("[SENSOR] temp=%.1f°C  hum=%.1f%%  pressure=%.1fhPa  soil=%d%%\n",
+                r.temperature, r.humidity, r.pressure, r.soil_moisture);
   return r;
 }
 
@@ -99,7 +101,7 @@ bool publish_reading(const Reading& r) {
   doc["device_id"]      = DEVICE_ID;
   doc["message_id"]     = r.message_id;
   doc["temperature"]    = r.temperature;
-  doc["humidity"]       = nullptr;
+  doc["humidity"]       = r.humidity;
   doc["soil_moisture"]  = r.soil_moisture;
   doc["light"]          = r.light;
   doc["timestamp"]      = r.timestamp;
@@ -166,11 +168,11 @@ void setup() {
   Serial.println("\n=== Plant Monitor v1 ===");
 
   Wire.begin(21, 22);
-  if (!bmp.begin(0x76)) {
-    Serial.println("[ERROR] BMP280 not found!");
+  if (!bme.begin(0x76)) {
+    Serial.println("[ERROR] BME280 not found!");
     while (1) delay(1000);
   }
-  Serial.println("[OK] BMP280 ready.");
+  Serial.println("[OK] BME280 ready.");
 
   pinMode(SOIL_PIN, INPUT);
   analogSetPinAttenuation((gpio_num_t)SOIL_PIN, ADC_11db);
