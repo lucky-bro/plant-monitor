@@ -1,9 +1,12 @@
 import asyncio
+import json
 import logging
-import os
 from contextlib import asynccontextmanager
+from typing import AsyncGenerator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select, text
 from dotenv import load_dotenv
 
@@ -20,6 +23,12 @@ logger = logging.getLogger(__name__)
 
 mqtt_client = None
 main_loop   = None
+sse_clients: list[asyncio.Queue] = []
+
+
+async def broadcast(payload: dict):
+    for queue in list(sse_clients):
+        await queue.put(payload)
 
 
 async def save_telemetry(payload: dict):
@@ -51,6 +60,8 @@ async def save_telemetry(payload: dict):
 
             await session.commit()
             logger.info(f"[DB] Saved: {payload.get('message_id')}")
+
+        await broadcast(payload)
     except Exception as e:
         logger.error(f"[DB] Error saving telemetry: {e}")
 
@@ -89,6 +100,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
+
 
 @app.get("/health")
 async def health():
@@ -104,8 +122,8 @@ async def health():
         "telemetry_count": telemetry_count,
         "devices": [
             {
-                "device_id":   d.device_id,
-                "is_online":   d.is_online,
+                "device_id":    d.device_id,
+                "is_online":    d.is_online,
                 "last_seen_at": d.last_seen_at.isoformat() if d.last_seen_at else None,
             }
             for d in devices
@@ -122,8 +140,8 @@ async def get_devices():
     return {
         "devices": [
             {
-                "device_id":   d.device_id,
-                "is_online":   d.is_online,
+                "device_id":    d.device_id,
+                "is_online":    d.is_online,
                 "last_seen_at": d.last_seen_at.isoformat() if d.last_seen_at else None,
             }
             for d in devices
@@ -142,14 +160,72 @@ async def get_alerts():
     return {
         "alerts": [
             {
-                "device_id":   a.device_id,
-                "alert_type":  a.alert_type,
+                "device_id":    a.device_id,
+                "alert_type":   a.alert_type,
                 "last_sent_at": a.last_sent_at.isoformat() if a.last_sent_at else None,
-                "updated_at":  a.updated_at.isoformat() if a.updated_at else None,
+                "updated_at":   a.updated_at.isoformat() if a.updated_at else None,
             }
             for a in alerts
         ]
     }
+
+
+@app.get("/device/{device_id}/history")
+async def get_history(device_id: str, range: str = Query("24h", pattern="^(24h|7d)$")):
+    async with AsyncSessionLocal() as session:
+        if range == "24h":
+            result = await session.execute(
+                text("""
+                    SELECT timestamp, temperature, humidity, soil_moisture, light
+                    FROM telemetry_raw
+                    WHERE device_id = :device_id
+                      AND received_at > NOW() - INTERVAL '24 hours'
+                    ORDER BY timestamp ASC
+                """),
+                {"device_id": device_id},
+            )
+        else:
+            result = await session.execute(
+                text("""
+                    SELECT
+                        EXTRACT(EPOCH FROM date_trunc('hour', to_timestamp(timestamp)))::bigint AS timestamp,
+                        ROUND(AVG(temperature)::numeric, 1)    AS temperature,
+                        ROUND(AVG(humidity)::numeric, 1)       AS humidity,
+                        ROUND(AVG(soil_moisture)::numeric)     AS soil_moisture,
+                        ROUND(AVG(NULLIF(light, -1))::numeric) AS light
+                    FROM telemetry_raw
+                    WHERE device_id = :device_id
+                      AND received_at > NOW() - INTERVAL '7 days'
+                    GROUP BY date_trunc('hour', to_timestamp(timestamp))
+                    ORDER BY timestamp ASC
+                """),
+                {"device_id": device_id},
+            )
+        rows = result.mappings().all()
+
+    return {"device_id": device_id, "range": range, "data": [dict(r) for r in rows]}
+
+
+@app.get("/events")
+async def events():
+    queue: asyncio.Queue = asyncio.Queue()
+    sse_clients.append(queue)
+
+    async def stream() -> AsyncGenerator[str, None]:
+        try:
+            while True:
+                payload = await queue.get()
+                yield f"data: {json.dumps(payload)}\n\n"
+        except asyncio.CancelledError:
+            pass
+        finally:
+            sse_clients.remove(queue)
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.get("/telemetry")
