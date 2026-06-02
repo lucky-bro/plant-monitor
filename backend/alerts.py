@@ -7,7 +7,7 @@ from models import AlertState
 
 logger = logging.getLogger(__name__)
 
-DEBOUNCE_COUNT   = 3
+DEBOUNCE_COUNT   = 2          # 2 consecutive readings (= ~10 min with 5-min deep sleep)
 COOLDOWN_SECONDS = 30 * 60
 
 ALERT_RULES = {

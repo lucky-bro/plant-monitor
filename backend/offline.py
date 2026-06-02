@@ -9,7 +9,7 @@ from database import AsyncSessionLocal
 
 logger = logging.getLogger(__name__)
 
-OFFLINE_THRESHOLD_SECONDS = 9 * 60  # 3× the 3-min heartbeat (firmware publishes ≥ every 3 min)
+OFFLINE_THRESHOLD_SECONDS = 15 * 60  # 3× the 5-min wake interval (firmware deep-sleeps 5 min between publishes)
 CHECK_INTERVAL_SECONDS    = 60
 
 # Set from main.py once Telegram is wired up
