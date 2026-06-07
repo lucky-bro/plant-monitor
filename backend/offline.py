@@ -9,7 +9,7 @@ from database import AsyncSessionLocal
 
 logger = logging.getLogger(__name__)
 
-OFFLINE_THRESHOLD_SECONDS = 15 * 60  # 3× the 5-min wake interval (firmware deep-sleeps 5 min between publishes)
+OFFLINE_THRESHOLD_SECONDS = 18 * 60  # 3× wake interval + safety margin for occasional slow WiFi
 CHECK_INTERVAL_SECONDS    = 60
 
 # Set from main.py once Telegram is wired up
@@ -26,11 +26,15 @@ async def update_device_seen(session: AsyncSession, device_id: str):
     if state is None:
         session.add(DeviceState(device_id=device_id, is_online=True, last_seen_at=now))
     else:
-        was_offline = not state.is_online
-        state.is_online = True
+        was_offline       = not state.is_online
+        # Only notify recovery if we actually sent an offline notification.
+        # Clearing offline_notified_at on recovery also re-arms the offline notifier.
+        should_notify_up  = was_offline and state.offline_notified_at is not None
+        state.is_online   = True
         state.last_seen_at = now
-        state.updated_at = now
-        if was_offline:
+        state.updated_at  = now
+        if should_notify_up:
+            state.offline_notified_at = None
             msg = f"{device_id} is back online."
             logger.info(f"[DEVICE] {msg}")
             await _notify(msg)

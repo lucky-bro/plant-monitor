@@ -13,7 +13,7 @@
 // Deep sleep schedule
 // ============================================================================
 const uint64_t SLEEP_DURATION_US = 5ULL * 60 * 1000000;  // 5 minutes
-const int      WIFI_TIMEOUT_MS   = 8000;                 // give up on WiFi after 8s
+const int      WIFI_TIMEOUT_MS   = 15000;                // WiFi cold-start can take 10-12s
 const int      MQTT_TIMEOUT_MS   = 5000;                 // give up on MQTT  after 5s
 const int      NTP_WAIT_MS       = 3000;                 // wait this long for time sync
 
