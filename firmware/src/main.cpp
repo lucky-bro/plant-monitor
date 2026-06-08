@@ -205,7 +205,9 @@ void sync_ntp() {
 
 bool mqtt_connect() {
   mqtt.setServer(MQTT_HOST, MQTT_PORT);
-  mqtt.setKeepAlive(60);
+  // Short keepalive: our active session is only a few seconds before deep sleep.
+  // Broker will mark abandoned connections stale within ~22s instead of ~90s.
+  mqtt.setKeepAlive(15);
 
   Serial.printf("[MQTT] Connecting to %s:%d ...\n", MQTT_HOST, MQTT_PORT);
   unsigned long start = millis();
@@ -266,9 +268,11 @@ bool flush_buffer() {
 void go_to_sleep() {
   if (mqtt.connected()) {
     mqtt.disconnect();
+    delay(100);  // let DISCONNECT packet and TCP FIN flush
   }
-  WiFi.disconnect(true);
+  WiFi.disconnect(true, true);  // disconnect + erase AP from RAM
   WiFi.mode(WIFI_OFF);
+  delay(100);  // let WiFi stack settle
 
   Serial.printf("[SLEEP] Sleeping for %llu seconds...\n", SLEEP_DURATION_US / 1000000);
   Serial.flush();
