@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Float, String, BigInteger, DateTime, Boolean, UniqueConstraint, func
+from sqlalchemy import Column, Integer, Float, String, Text, BigInteger, DateTime, Boolean, UniqueConstraint, func
 from database import Base
 
 
@@ -40,3 +40,15 @@ class DeviceState(Base):
     last_seen_at        = Column(DateTime, nullable=True)
     offline_notified_at = Column(DateTime, nullable=True)
     updated_at          = Column(DateTime, server_default=func.now())
+
+
+class Insight(Base):
+    __tablename__ = "insights"
+
+    id           = Column(Integer, primary_key=True)
+    device_id    = Column(String, nullable=False, index=True)
+    text         = Column(Text, nullable=False)
+    trigger      = Column(String, nullable=False)   # "scheduled" or "alert"
+    period_start = Column(DateTime, nullable=True)
+    period_end   = Column(DateTime, nullable=True)
+    generated_at = Column(DateTime, server_default=func.now(), index=True)

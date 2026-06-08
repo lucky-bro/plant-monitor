@@ -16,6 +16,7 @@ import mqtt_client as mqtt_module
 from alerts import evaluate_alerts
 from offline import update_device_seen, offline_detection_loop
 from telegram_bot import start_bot, stop_bot
+from insights import insights_loop, get_latest_insight, generate_insight
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -86,13 +87,15 @@ async def lifespan(app: FastAPI):
     mqtt_module.start_mqtt(mqtt_client)
     logger.info("[MQTT] Client started.")
 
-    offline_task = asyncio.create_task(offline_detection_loop())
+    offline_task  = asyncio.create_task(offline_detection_loop())
+    insights_task = asyncio.create_task(insights_loop())
     await start_bot()
 
     yield
 
     await stop_bot()
     offline_task.cancel()
+    insights_task.cancel()
     if mqtt_client:
         mqtt_module.stop_mqtt(mqtt_client)
     logger.info("[MQTT] Client stopped.")
@@ -226,6 +229,33 @@ async def events():
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@app.get("/insights")
+async def get_insights(device_id: str = "plant-01"):
+    insight = await get_latest_insight(device_id)
+    if insight is None:
+        return {"device_id": device_id, "insight": None}
+    return {
+        "device_id": device_id,
+        "insight": {
+            "id":           insight.id,
+            "text":         insight.text,
+            "trigger":      insight.trigger,
+            "generated_at": insight.generated_at.isoformat() if insight.generated_at else None,
+            "period_start": insight.period_start.isoformat() if insight.period_start else None,
+            "period_end":   insight.period_end.isoformat() if insight.period_end else None,
+        },
+    }
+
+
+@app.post("/insights/generate")
+async def trigger_insight(device_id: str = "plant-01"):
+    """Manual trigger — useful for testing without waiting for the scheduled job."""
+    insight = await generate_insight(device_id, trigger="manual")
+    if insight is None:
+        return {"ok": False, "reason": "insufficient data or LLM unavailable"}
+    return {"ok": True, "id": insight.id}
 
 
 @app.get("/telemetry")

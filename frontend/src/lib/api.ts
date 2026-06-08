@@ -86,6 +86,26 @@ export async function fetchHistory(
   }
 }
 
+export interface Insight {
+  id:           number;
+  text:         string;
+  trigger:      string;
+  generated_at: string | null;
+  period_start: string | null;
+  period_end:   string | null;
+}
+
+export async function fetchInsight(deviceId = "plant-01"): Promise<Insight | null> {
+  try {
+    const res = await fetch(`${apiBase()}/insights?device_id=${deviceId}`, { cache: "no-store" });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json.insight ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function getEventsUrl(): string {
   return `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/events`;
 }

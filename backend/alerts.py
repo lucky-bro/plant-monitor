@@ -86,6 +86,11 @@ async def evaluate_alerts(session: AsyncSession, device_id: str, payload: dict):
                         msg = rule["message"](device_id, value)
                         logger.info(f"[ALERT] {msg}")
                         await _notify(msg)
+                        # Kick off an AI insight regeneration in the background — gives the
+                        # dashboard fresh context right when something interesting happened.
+                        import asyncio
+                        from insights import generate_insight
+                        asyncio.create_task(generate_insight(device_id, trigger="alert"))
                     else:
                         logger.info(f"[ALERT] {alert_type} re-triggered but in cooldown, suppressed.")
             else:

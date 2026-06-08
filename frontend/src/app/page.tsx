@@ -1,15 +1,17 @@
 import { Leaf } from "lucide-react";
-import { fetchLatestTelemetry, fetchDevices, fetchAlerts } from "@/lib/api";
+import { fetchLatestTelemetry, fetchDevices, fetchAlerts, fetchInsight } from "@/lib/api";
 import HeroMetrics from "./components/HeroMetrics";
 import AlertsBanner from "./components/AlertsBanner";
 import HistoryCharts from "./components/HistoryCharts";
 import DeviceStatusBadge from "./components/DeviceStatusBadge";
+import AIInsight from "./components/AIInsight";
 
 export default async function Page() {
-  const [telemetry, devices, alerts] = await Promise.all([
+  const [telemetry, devices, alerts, insight] = await Promise.all([
     fetchLatestTelemetry(),
     fetchDevices(),
     fetchAlerts(),
+    fetchInsight(),
   ]);
 
   const primaryDevice = devices[0]?.device_id ?? "plant-01";
@@ -31,6 +33,7 @@ export default async function Page() {
 
       <div className="flex flex-col gap-5">
         <HeroMetrics initial={telemetry} />
+        <AIInsight initial={insight} />
         <HistoryCharts deviceId={primaryDevice} />
       </div>
     </main>
