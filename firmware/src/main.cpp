@@ -159,22 +159,32 @@ Reading read_sensors() {
 // Network
 // ============================================================================
 bool wifi_connect() {
-  Serial.printf("[WiFi] Connecting to %s ", WIFI_SSID);
+  WiFi.persistent(false);
+  WiFi.mode(WIFI_OFF);
+  delay(50);
   WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  WiFi.setSleep(false);
 
-  unsigned long start = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - start < WIFI_TIMEOUT_MS) {
-    delay(200);
-    Serial.print(".");
+  for (int attempt = 1; attempt <= 2; attempt++) {
+    Serial.printf("[WiFi] Attempt %d/2 → %s ", attempt, WIFI_SSID);
+    WiFi.disconnect(true);
+    delay(100);
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+    unsigned long start = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - start < WIFI_TIMEOUT_MS) {
+      delay(200);
+      Serial.print(".");
+    }
+
+    if (WiFi.status() == WL_CONNECTED) {
+      Serial.printf("\n[WiFi] Connected (attempt %d, %lums). IP=%s RSSI=%d dBm\n",
+                    attempt, millis() - start,
+                    WiFi.localIP().toString().c_str(), WiFi.RSSI());
+      return true;
+    }
+    Serial.printf("\n[WiFi] Attempt %d failed (status=%d).\n", attempt, WiFi.status());
   }
-
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.printf("\n[WiFi] Connected. IP: %s\n", WiFi.localIP().toString().c_str());
-    return true;
-  }
-
-  Serial.println("\n[WiFi] Failed.");
   return false;
 }
 
