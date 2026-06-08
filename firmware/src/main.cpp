@@ -25,9 +25,11 @@ const int I2C_SCL  = 6;
 const int SOIL_PIN = 4;
 
 // --- Soil sensor calibration (capacitive, 3.3V power) ---
-const int AIR_VALUE         = 2925;
-const int WATER_VALUE       = 750;
-const int SOIL_SAMPLE_COUNT = 16;   // average N ADC reads to kill noise
+const int AIR_VALUE          = 2925;
+const int WATER_VALUE        = 750;
+const int SOIL_SAMPLE_COUNT  = 16;   // average N ADC reads to kill ADC noise
+const int SOIL_WATER_JUMP    = 10;   // sudden +10% = watering event, accept
+                                     // smaller upward drift = sensor noise, ignore
 
 // ============================================================================
 // Ring buffer — survives deep sleep in RTC slow memory
@@ -46,11 +48,12 @@ struct Reading {
 };
 
 RTC_DATA_ATTR Reading  ring_buffer[BUFFER_SIZE];
-RTC_DATA_ATTR int      buf_head        = 0;
-RTC_DATA_ATTR int      buf_count       = 0;
-RTC_DATA_ATTR int      overflow_count  = 0;
-RTC_DATA_ATTR uint32_t seq             = 0;
-RTC_DATA_ATTR uint32_t boot_count      = 0;
+RTC_DATA_ATTR int      buf_head           = 0;
+RTC_DATA_ATTR int      buf_count          = 0;
+RTC_DATA_ATTR int      overflow_count     = 0;
+RTC_DATA_ATTR uint32_t seq                = 0;
+RTC_DATA_ATTR uint32_t boot_count         = 0;
+RTC_DATA_ATTR int      last_soil_reported = -1;  // for drying-only smoothing
 
 // ============================================================================
 // Globals (re-initialized on every wake — these are RAM, not RTC)
@@ -128,6 +131,24 @@ int read_soil_avg() {
   return (int)(sum / SOIL_SAMPLE_COUNT);
 }
 
+// Physical-reality smoothing: soil can only dry (go down) unless there's a
+// large jump up (= someone watered). Small upward fluctuations are sensor
+// noise and get suppressed. State preserved across deep sleep in RTC memory.
+int smooth_soil(int raw_pct) {
+  if (last_soil_reported < 0) {
+    // First boot — accept whatever we measured.
+    last_soil_reported = raw_pct;
+  } else if (raw_pct <= last_soil_reported) {
+    // Drying — accept any decrease, however small.
+    last_soil_reported = raw_pct;
+  } else if (raw_pct - last_soil_reported >= SOIL_WATER_JUMP) {
+    // Big jump up — real event (watering). Accept.
+    last_soil_reported = raw_pct;
+  }
+  // Else: small upward drift, ignore (keep last_soil_reported).
+  return last_soil_reported;
+}
+
 Reading read_sensors() {
   Reading r;
   r.valid       = true;
@@ -143,8 +164,8 @@ Reading read_sensors() {
   }
 
   int raw_soil    = read_soil_avg();
-  r.soil_moisture = map(raw_soil, AIR_VALUE, WATER_VALUE, 0, 100);
-  r.soil_moisture = constrain(r.soil_moisture, 0, 100);
+  int raw_pct     = constrain(map(raw_soil, AIR_VALUE, WATER_VALUE, 0, 100), 0, 100);
+  r.soil_moisture = smooth_soil(raw_pct);
 
   r.timestamp = get_timestamp();
   seq++;
