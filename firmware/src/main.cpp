@@ -189,18 +189,23 @@ bool wifi_connect() {
 }
 
 void sync_ntp() {
-  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+  // Try Cloudflare (anycast, usually <30ms) + Google + pool as fallback.
+  // Some routers/ISPs block outbound UDP 123 to less-known NTP hosts.
+  configTime(0, 0, "time.cloudflare.com", "time.google.com", "pool.ntp.org");
+
   unsigned long start = millis();
   time_t now;
   while (millis() - start < NTP_WAIT_MS) {
     time(&now);
     if (now > 1000000000L) {
-      Serial.printf("[NTP] Synced: %ld\n", (long)now);
+      Serial.printf("[NTP] Synced in %lums: %ld\n", millis() - start, (long)now);
       return;
     }
     delay(100);
   }
-  Serial.println("[NTP] Timed out (using cached RTC time).");
+  time(&now);
+  Serial.printf("[NTP] Timed out after %dms (time=%ld, using cached/fallback).\n",
+                NTP_WAIT_MS, (long)now);
 }
 
 bool mqtt_connect() {
