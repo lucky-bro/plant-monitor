@@ -59,15 +59,20 @@ async def _gather_summary(session: AsyncSession, device_id: str) -> dict | None:
     if not row or not row["n"] or row["n"] < 3:
         return None
 
-    # Soil trend: compare first vs last reading
+    # Soil trend: compare first vs last reading WITHIN THE LOOKBACK WINDOW.
+    # Without the received_at filter, soil_start would be the very first row
+    # ever inserted (e.g. a stray 100% during sensor calibration), producing
+    # nonsense trend deltas in the insight.
     trend_result = await session.execute(
-        text("""
+        text(f"""
             SELECT
                 (SELECT soil_moisture FROM telemetry_raw
                  WHERE device_id = :device_id
+                   AND received_at > NOW() - INTERVAL '{LOOKBACK_HOURS} hours'
                  ORDER BY received_at ASC  LIMIT 1) AS soil_start,
                 (SELECT soil_moisture FROM telemetry_raw
                  WHERE device_id = :device_id
+                   AND received_at > NOW() - INTERVAL '{LOOKBACK_HOURS} hours'
                  ORDER BY received_at DESC LIMIT 1) AS soil_end
         """),
         {"device_id": device_id},
@@ -84,8 +89,8 @@ def _build_prompt(device_id: str, s: dict) -> str:
     soil_trend = "stable"
     if s["soil_start"] is not None and s["soil_end"] is not None:
         delta = s["soil_end"] - s["soil_start"]
-        if   delta < -5: soil_trend = f"drying ({delta}% over period)"
-        elif delta >  5: soil_trend = f"wetter ({delta:+d}% over period)"
+        if   delta <= -2: soil_trend = f"drying ({delta}% over period)"
+        elif delta >=  5: soil_trend = f"wetter ({delta:+d}% over period)"
 
     light_line = f"Light: avg {s['light_avg']} lux" if s["light_avg"] is not None else "Light: no sensor data"
 
